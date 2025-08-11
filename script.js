@@ -293,19 +293,117 @@ for (let i = 0; i < 50; i++) {
   });
 }
 
+class Player {
+  constructor(x, y, width, height, color = 'blue') {
+    this.x = x;
+    this.y = y;
+    this.initialY = y;  
+    this.width = width;
+    this.height = height;
+    this.color = color;
 
-function animate() {
-    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-     ctx.drawImage(bg, 0,-200, canvasWidth*1.3, canvasHeight*1.3);
-    for (const obj of placedObjects) {
-        ctx.strokeRect(obj.x,obj.y,obj.width,obj.height)
-        ctx.drawImage(objectSprite,obj.spriteX,obj.spriteY,obj.width,obj.height, obj.x, obj.y,obj.width, obj.height); }
-    requestAnimationFrame(animate);
+    this.speedX = 0;
+    this.speedY = 0;
+
+    this.moveSpeed = 4;
+    this.dashMultiplier = 2;
+    this.isDashing = false;
+    this.friction = 0.8;
+    
+    this.x = Math.max(0, Math.min(this.x, canvas.width - this.width));
+    this.y = Math.max(0, Math.min(this.y, canvas.height - this.height));
+  
+  }
+
+  update() {
+  
+  
+  // Apply tentative position
+  this.x += this.speedX;
+  this.y += this.speedY;
+  const groundY = this.initialY;
+  
+  // Check collision with objects
+  this.checkCollision(placedObjects);
+  
+  // Prevent falling below floor
+  if (this.y + this.height > canvas.height) {
+    this.y = canvas.height - this.height;
+    this.speedY = 0;
+    this.isOnGround = true;
+  } else if (!this.isOnGround) {
+    this.isOnGround = false;
+  }
+  
+  // Friction for horizontal speed handled in animate()
 }
-animate()
- 
-// building a function that make sure only the max instance of an image is present
- function maxInstancesFilter(){
+  checkCollision(objects) {
+  for (const obj of objects) {
+    if (!obj.walkable && isColliding(this, obj)) {
+      // Simple collision response: stop horizontal movement
+      // You can also try to push the player outside the object bounds
+
+      // Horizontal collision check
+      if (this.x + this.width > obj.x+obj.width/2 && this.x < obj.x + obj.width/2) {
+        if (this.speedX > 0) {
+          // Moving right — place player to left of object
+          this.x = obj.x+obj.width/2 - this.width;
+          this.speedX = 0;
+        } else if (this.speedX < 0) {
+          // Moving left — place player to right of object
+          this.x = obj.x + obj.width/2;
+          this.speedX = 0;
+        }
+      }
+
+      // Vertical collision check
+      if (this.y + this.height > obj.y + obj.height / 2 && this.y < obj.y + obj.height / 2) {
+  if (this.speedY > 0) {
+    // Moving down: stop movement if player bottom would go past center
+    if (this.y + this.height >= obj.y + obj.height / 2) {
+      this.speedY = 0;
+      this.y = obj.y + obj.height / 2 - this.height; // stop exactly at center line
+    }
+  } else if (this.speedY < 0) {
+    // Moving up: stop movement if player top would go above center
+    if (this.y <= obj.y + obj.height / 2) {
+      this.speedY = 0;
+      this.y = obj.y + obj.height / 2; // stop just below center line
+    }
+  }
+}
+
+    }
+  }
+
+}
+draw(ctx) {
+    ctx.fillStyle = this.color;
+    ctx.fillRect(this.x, this.y, this.width, this.height);
+  }
+setMovement(keys) {
+    const speed = this.isDashing ? this.moveSpeed * this.dashMultiplier : this.moveSpeed;
+
+    // Reset speeds
+    this.speedX = 0;
+    this.speedY = 0;
+
+    if (keys.left) this.speedX = -speed;
+    if (keys.right) this.speedX = speed;
+    if (keys.up) this.speedY = -speed;
+    if (keys.down) this.speedY = speed;
+  }
+
+  setDash(isDashing) {
+    this.isDashing = isDashing;
+  }
+}
+
+
+
+
+
+function maxInstancesFilter(){
     let count=placedObjects.reduce((acc,curr)=>{
     acc[curr.name]=(acc[curr]||0)+1;
     return acc;
@@ -317,3 +415,66 @@ animate()
  }
 
 console.log(placedObjects)
+const player = new Player(50, 50, 10, 10);
+
+const keys = {
+  left: false,
+  right: false,
+  up: false,
+  down: false,
+  dash: false,
+};
+
+
+window.addEventListener('keydown', e => {
+  if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
+  if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
+  if (e.code === 'ArrowUp' || e.code === 'KeyW') keys.up = true;
+  if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.down = true;
+  if (e.shiftKey) keys.dash = true;
+
+  player.setDash(keys.dash);
+  player.setMovement(keys);
+});
+
+window.addEventListener('keyup', e => {
+  if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+  if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+  if (e.code === 'ArrowUp' || e.code === 'KeyW') keys.up = false;
+  if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.down = false;
+  if (!e.shiftKey) keys.dash = false;
+
+  player.setDash(keys.dash);
+  player.setMovement(keys);
+});
+
+function isColliding(rect1, rect2) {
+  return (
+    rect1.x < rect2.x + rect2.width &&
+    rect1.x + rect1.width > rect2.x &&
+    rect1.y < rect2.y + rect2.height &&
+    rect1.y + rect1.height > rect2.y
+  );
+}
+
+
+function animate() {
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+     ctx.drawImage(bg, 0,-200, canvasWidth*1.3, canvasHeight*1.3);
+    
+  
+    for (const obj of placedObjects) {
+        ctx.drawImage(objectSprite,obj.spriteX,obj.spriteY,obj.width,obj.height, obj.x, obj.y,obj.width, obj.height); }
+
+
+    if (keys.left) player.speedX = -player.moveSpeed;
+    else if (keys.right) player.speedX = player.moveSpeed;
+    else player.speedX *= player.friction; 
+    player.update();
+    player.draw(ctx);
+    requestAnimationFrame(animate);
+}
+animate()
+ 
+// building a function that make sure only the max instance of an image is present
+ 
