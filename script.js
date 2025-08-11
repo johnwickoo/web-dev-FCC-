@@ -103,7 +103,7 @@ const playerWidth = 69;
 const playerHeight = 44;
 let gameFrames = 0;
 const staggerFrames = 5; // controls animation speed
-const gravity=10
+const gravity=0.8
 // Key states
 const keys = {
     ArrowUp: false,
@@ -114,7 +114,7 @@ const keys = {
     a: false,
     s: false,
     d: false,
-    Space: false 
+    Space: false
 };
 
 window.addEventListener('keydown', e => {
@@ -127,20 +127,22 @@ window.addEventListener('keydown', e => {
     if (e.key === " ") keys.Space = true;
     else if (keys.hasOwnProperty(e.key)) keys[e.key] = true;
 });
+
 window.addEventListener('keyup', e => {
     if (e.key === " ") keys.Space = false;
     else if (keys.hasOwnProperty(e.key)) keys[e.key] = false;
 });
 
+//include stamina and remove jump limiters and have jump cos that as well as attacks, add mana too and health
 // Animation states definition
 const animationState = [
     { name: 'idle', frames: 6 }, 
     { name: 'run', frames: 6 }, 
-    { name: 'jump', frames: 6 },
     { name: 'fall', frames: 9 },
     { name: 'dizzy', frames: 11 },
     { name: 'sit', frames: 5 },
     { name: 'roll', frames: 7 },
+    { name: 'jump', frames: 4 },
     { name: 'bite', frames: 7 },
     { name: 'ko', frames: 12 },
     { name: 'getHit', frames: 4 }
@@ -167,90 +169,102 @@ class Player {
         this.speed = 15;
 
         this.speedY = 0;
-        this.gravity = 0.7;  // tweak this for jump feel
+        this.gravity = gravity;  // tweak this for jump feel
         this.jumpStrength = 15;
         this.isOnGround = false;
         this.groundY = this.y;  // The "floor" y position
-        this.verticalRange = 50; // How far up/down player can move from groundY
-        this.currentVerticalOffset = 0;
-        this.verticalOffsetSpeed = 4
     }
 
-   move() {
-    // Horizontal movement
-    if (keys.ArrowRight || keys.d) {
-        this.x += this.speed;
-        if (this.isOnGround) this.state = "run";
-    } else if (keys.ArrowLeft || keys.a) {
-        this.x -= this.speed;
-        if (this.isOnGround) this.state = "run";
-    } else if (this.isOnGround) {
-        this.state = "idle";
-    }
-
-    // Vertical movement on ground (up/down within range)
-    if (this.isOnGround) {
-        if (keys.ArrowUp || keys.w) {
-            this.currentVerticalOffset = Math.max(this.currentVerticalOffset - this.verticalOffsetSpeed, -this.verticalRange);
-        }
-        if (keys.ArrowDown || keys.s) {
-            this.currentVerticalOffset = Math.min(this.currentVerticalOffset + this.verticalOffsetSpeed, this.verticalRange);
-        }
-    }
-
-    // Calculate vertical position with offset and jump/fall speed
-    this.y = this.groundY + this.currentVerticalOffset + this.speedY;
-
-    // Jump start
-    if (keys.Space && this.isOnGround) {
-        this.speedY = -this.jumpStrength;
-        this.isOnGround = false;
-        this.state = "jump";
-
-        // Start jump from current vertical offset
-        this.groundY = this.y - this.currentVerticalOffset;
-    }
-
-    // Gravity when in air
-    if (!this.isOnGround) {
-        this.speedY += this.gravity;
-    }
-
-    // Landing
-    if (this.y >= this.groundY + this.currentVerticalOffset) {
-        this.y = this.groundY + this.currentVerticalOffset;
-        this.speedY = 0;
-        this.isOnGround = true;
-
-        if (!(keys.ArrowLeft || keys.a || keys.ArrowRight || keys.d)) {
-            this.state = "idle";
+    update() {
+        // Horizontal movement
+        if (keys.ArrowRight || keys.d) {
+            this.x += this.speed;
+            if (this.isOnGround) this.state = "run";
+            this.facingLeft = false;
+        } else if (keys.ArrowLeft || keys.a) {
+            this.x -= this.speed;
+            this.facingLeft = true;
+            if (this.isOnGround) this.state = "run";
         } else {
-            this.state = "run";
+            if (this.isOnGround) this.state = "idle";
         }
-    } else {
-        if (this.speedY > 0) {
-            this.state = "fall";
+
+        // Jumping
+        if (keys.Space && this.isOnGround) {
+            this.speedY = -this.jumpStrength;
+            this.isOnGround = false;
+            this.state = "jump";
         }
+        // double jump
+        if (keys.Space && !this.isOnGround && this.y>canvas.height*0.3) {
+            this.speedY = -this.jumpStrength;
+            this.isOnGround = false;
+            this.state = "jump";
+            
+        }
+         if(this.y<canvas.height*0.3){
+            this.gravity=10
+            this.speedY += this.gravity;
+            this.y += this.speedY;
+        }
+
+        // Apply gravity
+        this.speedY += this.gravity;
+        this.y += this.speedY;
+       
+        // Landing on ground
+        if (this.y >= this.groundY) {
+            this.y = this.groundY;
+            this.speedY = 0;
+            this.gravity=gravity
+            this.isOnGround = true;
+            if (!(keys.ArrowLeft || keys.a || keys.ArrowRight || keys.d)) {
+                this.state = "idle";
+            } else {
+                this.state = "run";
+            }
+        } else {
+            // In air and falling
+            if (this.speedY > 0) {
+                this.state = "fall";
+            }
+        }
+
+        // Prevent going off screen horizontally
+        this.x = Math.max(0, Math.min(canvas.width - playerWidth * this.scale, this.x));
+        // Prevent going above top of canvas
+        this.y = Math.max(0, this.y);
     }
-
-    // Prevent going off screen horizontally
-    this.x = Math.max(0, Math.min(canvas.width - playerWidth * this.scale, this.x));
-    // Prevent going above top of canvas
-    this.y = Math.max(0, this.y);
-}
-
 
     draw() {
-        let position = Math.floor(gameFrames / staggerFrames) % playerAnimation[this.state].loc.length;
-        let frameX = playerAnimation[this.state].loc[position].x;
-        let frameY = playerAnimation[this.state].loc[position].y;
+    let position = Math.floor(gameFrames / staggerFrames) % playerAnimation[this.state].loc.length;
+    let frameX = playerAnimation[this.state].loc[position].x;
+    let frameY = playerAnimation[this.state].loc[position].y;
 
+    ctx.save();
+    //facing left mechanics
+    if (this.facingLeft) {
+        // Move to player's center, flip horizontally, then move back
+        ctx.translate(this.x + playerWidth * this.scale / 2, this.y);
+        ctx.scale(-1, 1);
+        // Move to player's center, flip horizontally, then move back
         ctx.drawImage(
             playerImage,
-            frameX, frameY, playerWidth, playerHeight, // source
-            this.x, this.y, playerWidth * this.scale, playerHeight * this.scale // destination
+            frameX, frameY, playerWidth, playerHeight,
+            -playerWidth * this.scale / 2, 0,
+            playerWidth * this.scale, playerHeight * this.scale
+        );
+    } else {
+        ctx.drawImage(
+            playerImage,
+            frameX, frameY, playerWidth, playerHeight,
+            this.x, this.y,
+            playerWidth * this.scale, playerHeight * this.scale
         );
     }
+    ctx.restore();
+}
+
 }
 
 const player = new Player(200, 550, 3);
@@ -258,7 +272,8 @@ const player = new Player(200, 550, 3);
 function animate() {
     ctx.save()
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    player.move();
+    player.update();
+
     player.draw();
     gameFrames++;
     requestAnimationFrame(animate);
