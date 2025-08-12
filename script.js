@@ -197,9 +197,11 @@ class Player {
         }
         // double jump
         if (keys.Space && !this.isOnGround && this.y>canvas.height*0.3) {
+    
             this.speedY = -this.jumpStrength;
             this.isOnGround = false;
             this.state = "jump";
+             
             
         }
          if(this.y<canvas.height*0.3){
@@ -273,8 +275,10 @@ function animate() {
     ctx.save()
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     player.update();
-
     player.draw();
+
+    playerHealth.update();
+    playerHealth.draw()
     gameFrames++;
     requestAnimationFrame(animate);
     ctx.restore()
@@ -283,3 +287,43 @@ function animate() {
 playerImage.onload = () => {
     animate();
 };
+
+//stats ui
+const canvasStat = document.getElementById("canvas3");
+const ctxStats = canvasStat.getContext("2d");
+canvasStat.width = 1400;
+canvasStat.height = 700;
+
+class HealthBar {
+    constructor(x, y, width, height, maxHealth, color = 'green') {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.maxHealth = maxHealth;
+        this.currentHealth = maxHealth;
+        this.color = color;
+    }
+
+    update(){
+        this.currentHealth-=1
+        
+    }
+
+    draw() {
+        // Background bar
+        ctx.fillStyle = 'red';
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+
+        // Health bar (foreground)
+        const healthRatio = this.currentHealth / this.maxHealth;
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.width * healthRatio, this.height);
+
+        // Optional border
+        ctx.strokeStyle = 'black';
+        ctx.strokeRect(this.x, this.y, this.width, this.height);
+    }
+}
+
+const playerHealth = new HealthBar(20, 20, 200, 20, 100);
