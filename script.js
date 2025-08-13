@@ -37,10 +37,12 @@ class Layer {
     }
     update() {
         this.speed = gameSpeed * this.speedModifier;
-        if (this.x <= -this.width) {
+        this.x -= this.speed;
+        this.x2 -= this.speed;
+        if (this.x <= -this.width||this.x >= this.width) {
             this.x = this.width + this.x2 - this.speed;
         }
-        if (this.x2 <= -this.width) {
+        if (this.x2 <= -this.width||this.x2 >= this.width) {
             this.x2 = this.width + this.x - this.speed;
         }
         this.x = Math.floor(this.x - this.speed);
@@ -124,21 +126,33 @@ window.addEventListener('keyup', e => {
     if (keys.hasOwnProperty(e.key)) keys[e.key] = false;
 });
 window.addEventListener('keydown', e => {
-    if (e.key === " ") keys.Space = true;
-    else if (keys.hasOwnProperty(e.key)) keys[e.key] = true;
+    if (e.code === "Space") {
+        keys.Space = true;
+    } else if (keys.hasOwnProperty(e.key)) {
+        keys[e.key] = true;
+    }
 });
-
 window.addEventListener('keyup', e => {
-    if (e.key === " ") keys.Space = false;
-    else if (keys.hasOwnProperty(e.key)) keys[e.key] = false;
+    if (e.code === "Space") {
+        keys.Space = false;
+    } else if (keys.hasOwnProperty(e.key)) {
+        keys[e.key] = false;
+    }
 });
+window.addEventListener('click',(e)=>{
+   const x = e.x
+   const y = e.y
+    console.log(x,y)
+    console.log(player.x,player.y)
+    player.teleport(x,y);
+})
 
 //include stamina and remove jump limiters and have jump cos that as well as attacks, add mana too and health
 // Animation states definition
 const animationState = [
     { name: 'idle', frames: 6 }, 
     { name: 'run', frames: 6 }, 
-    { name: 'fall', frames: 9 },
+    { name: 'fall', frames: 6 },
     { name: 'dizzy', frames: 11 },
     { name: 'sit', frames: 5 },
     { name: 'roll', frames: 7 },
@@ -159,7 +173,7 @@ animationState.forEach((state, index) => {
     }
     playerAnimation[state.name] = frames;
 });
-
+let jumpPressed=false; 
 class Player {
     constructor(x, y, scale) {
         this.x = x;
@@ -167,12 +181,12 @@ class Player {
         this.scale = scale;
         this.state = "idle";
         this.speed = 15;
-
         this.speedY = 0;
         this.gravity = gravity;  // tweak this for jump feel
         this.jumpStrength = 15;
         this.isOnGround = false;
-        this.groundY = this.y;  // The "floor" y position
+        this.groundY = canvas.height - playerHeight * this.scale*1.3;
+        this.prevFacingLeft=false
     }
 
     update() {
@@ -190,29 +204,38 @@ class Player {
         }
 
         // Jumping
-        if (keys.Space && this.isOnGround) {
-            this.speedY = -this.jumpStrength;
-            this.isOnGround = false;
-            this.state = "jump";
-        }
-        // double jump
-        if (keys.Space && !this.isOnGround && this.y>canvas.height*0.3) {
-    
-            this.speedY = -this.jumpStrength;
-            this.isOnGround = false;
-            this.state = "jump";
-             
-            
-        }
-         if(this.y<canvas.height*0.3){
-            this.gravity=10
-            this.speedY += this.gravity;
-            this.y += this.speedY;
-        }
+        
+        if (keys.Space && !jumpPressed) {
+    if (this.isOnGround && playerStamina.currentHealth >= 50) {
+        this.speedY = -this.jumpStrength;
+        this.isOnGround = false;
+        this.state = "jump";
+        playerStamina.decreaseStat(50);
+    } 
+    else if (!this.isOnGround && this.y > canvas.height * 0.3 && playerStamina.currentHealth >= 10) {
+        this.speedY = -this.jumpStrength;
+        this.state = "jump";
+        playerStamina.decreaseStat(10);
+    }
+    jumpPressed = true;
+}
+
+if (!keys.Space) {
+    jumpPressed = false;
+}
 
         // Apply gravity
-        this.speedY += this.gravity;
-        this.y += this.speedY;
+        if (this.y < canvas.height * 0.2) {
+    this.gravity = 10;
+    this.speedY += this.gravity;
+     this.y += this.speedY;
+} else {
+    this.gravity = gravity;
+    this.speedY += this.gravity;
+     this.y += this.speedY;
+}
+        
+       
        
         // Landing on ground
         if (this.y >= this.groundY) {
@@ -221,10 +244,11 @@ class Player {
             this.gravity=gravity
             this.isOnGround = true;
             if (!(keys.ArrowLeft || keys.a || keys.ArrowRight || keys.d)) {
-                this.state = "idle";
+                this.state = "run";
             } else {
                 this.state = "run";
             }
+            playerStamina.increaseStat(1)
         } else {
             // In air and falling
             if (this.speedY > 0) {
@@ -237,6 +261,17 @@ class Player {
         // Prevent going above top of canvas
         this.y = Math.max(0, this.y);
     }
+
+    teleport(x,y){
+        // let thisHasteleported=false
+        if(playerStamina.currentHealth>=50){
+            this.x = x - (playerWidth * this.scale) / 2;
+            this.y = y - (playerHeight * this.scale) / 2;
+            playerStamina.decreaseStat(50);}
+            
+            
+    
+        }
 
     draw() {
     let position = Math.floor(gameFrames / staggerFrames) % playerAnimation[this.state].loc.length;
@@ -256,6 +291,12 @@ class Player {
             -playerWidth * this.scale / 2, 0,
             playerWidth * this.scale, playerHeight * this.scale
         );
+        if (this.facingLeft !== this.prevFacingLeft) {
+            layers.forEach(layer => {
+            layer.speedModifier *= -1;
+            });
+            this.prevFacingLeft = this.facingLeft;
+    }
     } else {
         ctx.drawImage(
             playerImage,
@@ -278,7 +319,11 @@ function animate() {
     player.draw();
 
     playerHealth.update();
-    playerHealth.draw()
+    playerHealth.draw();
+
+    playerStamina.update();
+    playerStamina.draw()
+
     gameFrames++;
     requestAnimationFrame(animate);
     ctx.restore()
@@ -288,6 +333,13 @@ playerImage.onload = () => {
     animate();
 };
 
+
+
+
+
+
+
+
 //stats ui
 const canvasStat = document.getElementById("canvas3");
 const ctxStats = canvasStat.getContext("2d");
@@ -295,7 +347,7 @@ canvasStat.width = 1400;
 canvasStat.height = 700;
 
 class HealthBar {
-    constructor(x, y, width, height, maxHealth, color = 'green') {
+    constructor(x, y, width, height, maxHealth, color) {
         this.x = x;
         this.y = y;
         this.width = width;
@@ -306,13 +358,22 @@ class HealthBar {
     }
 
     update(){
-        this.currentHealth-=1
         
+        
+    }
+    increaseStat(health){
+        this.currentHealth+=health
+        if(this.currentHealth >= this.maxHealth){
+            this.currentHealth=this.maxHealth
+        }
+    }
+    decreaseStat(damage){
+        this.currentHealth-=damage
     }
 
     draw() {
         // Background bar
-        ctx.fillStyle = 'red';
+        ctx.fillStyle = 'grey';
         ctx.fillRect(this.x, this.y, this.width, this.height);
 
         // Health bar (foreground)
@@ -326,4 +387,5 @@ class HealthBar {
     }
 }
 
-const playerHealth = new HealthBar(20, 20, 200, 20, 100);
+const playerHealth = new HealthBar(20, 20, 200, 20, 100,'red');
+const playerStamina = new HealthBar(20, 40, 400, 20, 500,'green');
