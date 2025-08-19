@@ -39,11 +39,24 @@ class Layer {
         this.speed = gameSpeed * this.speedModifier;
         this.x -= this.speed;
         this.x2 -= this.speed;
-        if (this.x <= -this.width||this.x >= this.width) {
-            this.x = this.width + this.x2 - this.speed;
+        //game modifier is affected by speed modifierr thats determinant on direction
+        if (this.speed > 0) {
+            if (this.x <= -this.width) {
+                this.x = this.x2 + this.width;
+            }
+            if (this.x2 <= -this.width) {
+                this.x2 = this.x + this.width;
+            }
         }
-        if (this.x2 <= -this.width||this.x2 >= this.width) {
-            this.x2 = this.width + this.x - this.speed;
+
+// wrap to the left if going right
+        else if (this.speed < 0) {
+            if (this.x >= this.width) {
+                this.x = this.x2 - this.width;
+            }
+            if (this.x2 >= this.width) {
+                this.x2 = this.x - this.width;
+            }
         }
         this.x = Math.floor(this.x - this.speed);
         this.x2 = Math.floor(this.x2 - this.speed);
@@ -142,8 +155,7 @@ window.addEventListener('keyup', e => {
 window.addEventListener('click',(e)=>{
    const x = e.x
    const y = e.y
-    console.log(x,y)
-    console.log(player.x,player.y)
+   
     player.teleport(x,y);
 })
 
@@ -173,12 +185,19 @@ animationState.forEach((state, index) => {
     }
     playerAnimation[state.name] = frames;
 });
+
+
+
+
+let prevFacing=false
 let jumpPressed=false; 
 class Player {
     constructor(x, y, scale) {
         this.x = x;
         this.y = y;
         this.scale = scale;
+        this.playerWidth=playerWidth*this.scale;
+        this.playerHeight=playerHeight*this.scale
         this.state = "idle";
         this.speed = 15;
         this.speedY = 0;
@@ -186,54 +205,78 @@ class Player {
         this.jumpStrength = 15;
         this.isOnGround = false;
         this.groundY = canvas.height - playerHeight * this.scale*1.3;
-        this.prevFacingLeft=false
+        this.facingLeft=false;
+        this.facingRight=true;
+        this.targetX=null;
+        this.targetY=null;
+        this.acceleration=30;
+        this.maxSpeed = 25;
+        this.vx=0;
+        this.vy=0;
+
+
     }
 
     update() {
+        
         // Horizontal movement
         if (keys.ArrowRight || keys.d) {
             this.x += this.speed;
             if (this.isOnGround) this.state = "run";
             this.facingLeft = false;
+            this.facingRight=true
         } else if (keys.ArrowLeft || keys.a) {
             this.x -= this.speed;
             this.facingLeft = true;
+            this.facingRight=false
             if (this.isOnGround) this.state = "run";
         } else {
             if (this.isOnGround) this.state = "idle";
         }
-
+        
+        if (this.facingLeft && !prevFacing) {
+            layers.forEach(layer => {
+                layer.speedModifier *= -1;
+                prevFacing=true
+            });
+        }else if(this.facingRight && prevFacing){
+            layers.forEach(layer => {
+                layer.speedModifier *= -1;
+                 prevFacing=false
+            });
+        }
         // Jumping
         
         if (keys.Space && !jumpPressed) {
-    if (this.isOnGround && playerStamina.currentHealth >= 50) {
-        this.speedY = -this.jumpStrength;
-        this.isOnGround = false;
-        this.state = "jump";
-        playerStamina.decreaseStat(50);
-    } 
-    else if (!this.isOnGround && this.y > canvas.height * 0.3 && playerStamina.currentHealth >= 10) {
-        this.speedY = -this.jumpStrength;
-        this.state = "jump";
-        playerStamina.decreaseStat(10);
-    }
+            if (this.isOnGround && playerStamina.currentHealth >= 50) {
+                this.speedY = -this.jumpStrength;
+                this.isOnGround = false;
+                this.state = "jump";
+                playerStamina.decreaseStat(50);
+            } 
+            else if (!this.isOnGround && this.y > canvas.height * 0.3 && playerStamina.currentHealth >= 10) {
+                this.speedY = -this.jumpStrength;
+                this.state = "jump";
+                playerStamina.decreaseStat(10);
+            }
     jumpPressed = true;
 }
 
-if (!keys.Space) {
-    jumpPressed = false;
-}
 
-        // Apply gravity
+        if (!keys.Space) {
+            jumpPressed = false;
+        }
+
+                // Apply gravity
         if (this.y < canvas.height * 0.2) {
-    this.gravity = 10;
-    this.speedY += this.gravity;
-     this.y += this.speedY;
-} else {
-    this.gravity = gravity;
-    this.speedY += this.gravity;
-     this.y += this.speedY;
-}
+            this.gravity = 10;
+            this.speedY += this.gravity;
+            this.y += this.speedY;
+        } else {
+            this.gravity = gravity;
+            this.speedY += this.gravity;
+            this.y += this.speedY;
+        }
         
        
        
@@ -256,6 +299,43 @@ if (!keys.Space) {
             }
         }
 
+        //teleporting using targetX and ty
+
+          if (this.targetX !== null && this.targetY !== null) {
+                let dx = this.targetX - this.x;
+                let dy = this.targetY - this.y;
+
+                let dist = Math.sqrt((dx * dx) + (dy * dy));
+
+            if (dist > 100) { // still far from destination
+                let dirX = dx / dist;
+                let dirY = dy / dist;
+
+                // Apply acceleration 
+                this.vx += dirX * this.acceleration;  
+                this.vy += dirY * this.acceleration;  
+
+                // Update position
+                this.x += this.vx;
+                this.y += this.vy;
+                 
+
+                console.log("Moving:", "dx:",dx, "dy:",dy, "dist:",dist,"dirX:",dirX,"dirY:",dirY,this.vx);
+            } else {
+                // Reached destination
+                this.vx = 0;
+                this.vy = 0;
+                this.x = this.targetX;
+                this.y = this.targetY;
+
+                console.log("Arrived at target:", this.targetX, this.targetY);
+
+
+                this.targetX = null;
+                this.targetY = null;
+            }
+        }
+
         // Prevent going off screen horizontally
         this.x = Math.max(0, Math.min(canvas.width - playerWidth * this.scale, this.x));
         // Prevent going above top of canvas
@@ -265,44 +345,41 @@ if (!keys.Space) {
     teleport(x,y){
         // let thisHasteleported=false
         if(playerStamina.currentHealth>=50){
-            this.x = x - (playerWidth * this.scale) / 2;
-            this.y = y - (playerHeight * this.scale) / 2;
-            playerStamina.decreaseStat(50);}
-            
-            
-    
+            this.targetX = x - (playerWidth * this.scale) / 2;
+            this.targetY = y - (playerHeight * this.scale) / 2;
+            playerStamina.decreaseStat(50);
+
+        
+        }
         }
 
     draw() {
     let position = Math.floor(gameFrames / staggerFrames) % playerAnimation[this.state].loc.length;
     let frameX = playerAnimation[this.state].loc[position].x;
     let frameY = playerAnimation[this.state].loc[position].y;
-
+    
     ctx.save();
+   
+    if (this.facingLeft && !this.facingRight) {
+         
     //facing left mechanics
-    if (this.facingLeft) {
-        // Move to player's center, flip horizontally, then move back
-        ctx.translate(this.x + playerWidth * this.scale / 2, this.y);
+    ctx.strokeRect(this.x+playerWidth,this.y+playerHeight,this.playerWidth*0.5,this.playerHeight*2/3);
+        ctx.translate(this.x + this.playerWidth / 2, this.y);
         ctx.scale(-1, 1);
-        // Move to player's center, flip horizontally, then move back
         ctx.drawImage(
             playerImage,
             frameX, frameY, playerWidth, playerHeight,
             -playerWidth * this.scale / 2, 0,
-            playerWidth * this.scale, playerHeight * this.scale
+            this.playerWidth, this.playerHeight
         );
-        if (this.facingLeft !== this.prevFacingLeft) {
-            layers.forEach(layer => {
-            layer.speedModifier *= -1;
-            });
-            this.prevFacingLeft = this.facingLeft;
-    }
+
     } else {
+        ctx.strokeRect(this.x+playerWidth/2,this.y+playerHeight,this.playerWidth*0.5,this.playerHeight*2/3);
         ctx.drawImage(
             playerImage,
             frameX, frameY, playerWidth, playerHeight,
             this.x, this.y,
-            playerWidth * this.scale, playerHeight * this.scale
+            this.playerWidth, this.playerHeight
         );
     }
     ctx.restore();
