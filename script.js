@@ -213,6 +213,7 @@ class Player {
         this.maxSpeed = 25;
         this.vx=0;
         this.vy=0;
+       
 
 
     }
@@ -352,6 +353,14 @@ class Player {
         
         }
         }
+    getBoundingBox() {
+            return {
+                x: this.x,
+                y: this.y,
+                width: this.playerWidth*0.5,
+                height: this.playerHeight
+            };
+    }
 
     draw() {
     let position = Math.floor(gameFrames / staggerFrames) % playerAnimation[this.state].loc.length;
@@ -363,7 +372,7 @@ class Player {
     if (this.facingLeft && !this.facingRight) {
          
     //facing left mechanics
-    ctx.strokeRect(this.x+playerWidth,this.y+playerHeight,this.playerWidth*0.5,this.playerHeight*2/3);
+    // ctx.strokeRect(this.x+playerWidth,this.y+playerHeight,this.playerWidth*0.5,this.playerHeight*2/3);
         ctx.translate(this.x + this.playerWidth / 2, this.y);
         ctx.scale(-1, 1);
         ctx.drawImage(
@@ -374,7 +383,7 @@ class Player {
         );
 
     } else {
-        ctx.strokeRect(this.x+playerWidth/2,this.y+playerHeight,this.playerWidth*0.5,this.playerHeight*2/3);
+        // ctx.strokeRect(this.x+playerWidth/2,this.y+playerHeight,this.playerWidth*0.5,this.playerHeight*2/3);
         ctx.drawImage(
             playerImage,
             frameX, frameY, playerWidth, playerHeight,
@@ -392,18 +401,32 @@ const player = new Player(200, 550, 3);
 function animate() {
     ctx.save()
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+     
+    
+   targetCharacter(block, player);
+
     player.update();
     player.draw();
-
+   
     playerHealth.update();
     playerHealth.draw();
 
     playerStamina.update();
     playerStamina.draw()
 
+    block.update();
+    block.draw()
+
+    resolveCollision(player, block);
+
+
     gameFrames++;
-    requestAnimationFrame(animate);
+    
+    
+    
     ctx.restore()
+    requestAnimationFrame(animate);
+    
 }
 
 playerImage.onload = () => {
@@ -429,6 +452,7 @@ class HealthBar {
         this.y = y;
         this.width = width;
         this.height = height;
+        this.minHealth=0
         this.maxHealth = maxHealth;
         this.currentHealth = maxHealth;
         this.color = color;
@@ -445,7 +469,11 @@ class HealthBar {
         }
     }
     decreaseStat(damage){
-        this.currentHealth-=damage
+         this.currentHealth-=damage
+         if(this.currentHealth <= this.minHealth){
+            this.currentHealth=this.minHealth
+        }
+       
     }
 
     draw() {
@@ -466,3 +494,117 @@ class HealthBar {
 
 const playerHealth = new HealthBar(20, 20, 200, 20, 100,'red');
 const playerStamina = new HealthBar(20, 40, 400, 20, 500,'green');
+
+
+class Attacks{
+    constructor(){
+        this.x=(Math.random()*canvasWidth1)+ 200;
+        this.y=600;
+        this.width=50;
+        this.height=50;
+        this.damage=5;
+        this.speed=10;
+        this.vx=0;
+        this.vy=0
+        this.acceleration=30;
+       
+        
+    }
+    update(){
+    //   this.x -= this.speed;
+    }
+    getBoundingBox() {
+            return {
+                x: this.x,
+                y: this.y,
+                width: this.width,
+                height: this.height
+            };
+    }
+
+    draw(){
+        ctxStats.clearRect(0, 0, canvasStat.width, canvasStat.height);
+        ctxStats.fillStyle = 'grey';
+        ctxStats.fillRect(this.x, this.y, this.width, this.height);
+    }
+}
+
+const block = new Attacks();
+
+
+function isColliding(rect1, rect2) {
+    return (
+        rect1.x < rect2.x + rect2.width &&   // rect1’s left edge is left of rect2’s right edge
+        rect1.x + rect1.width > rect2.x &&   // rect1’s right edge is right of rect2’s left edge
+        rect1.y < rect2.y + rect2.height &&  // rect1’s top edge is above rect2’s bottom edge
+        rect1.y + rect1.height > rect2.y     // rect1’s bottom edge is below rect2’s top edge
+    );
+}
+function resolveCollision(player, block) {
+    const playerBox = player.getBoundingBox();
+    const blockBox = block.getBoundingBox();
+     
+    
+
+    if (!isColliding(blockBox, playerBox)) return;
+
+    // Calculate overlap on each axis
+    const overlapX = Math.min(
+        playerBox.x + playerBox.width - blockBox.x,
+        blockBox.x + blockBox.width - playerBox.x
+    );
+    const overlapY = Math.min(
+        playerBox.y + playerBox.height - blockBox.y,
+        blockBox.y + blockBox.height - playerBox.y
+    );
+
+    // Resolve in the axis of least penetration
+    if (overlapX < overlapY) {
+        // Horizontal collision
+        if (playerBox.x < blockBox.x) {
+            // Player is on the left
+            player.x = blockBox.x - playerBox.width;
+        } else {
+            // Player is on the right
+            playerBox.x = block.x + block.width;
+            // console.log("playerx"+player.x,"blockbox"+blockBox.x,"playerbox"+playerBox.x,"blockx"+block.x,"blockx and width"+block.x+block.width)
+        }
+        player.vx = 0; // stop horizontal speed only
+    } else {
+        // Vertical collision
+        if (player.y < blockBox.y) {
+            // Player is above
+            player.y = blockBox.y - playerBox.height;
+            player.onGround = true; // optional: mark standing on block
+        } else {
+            // Player is below
+            player.y = blockBox.y + blockBox.height;
+        }
+        player.vy = 0; // stop vertical speed only
+    }
+}
+
+
+function targetCharacter(block, player) {
+    const playerBox = player.getBoundingBox();
+    const blockBox = block.getBoundingBox();
+
+
+    
+    // Move block slowly toward player
+    const dx = playerBox.x - blockBox.x;
+    const dy = playerBox.y - blockBox.y;
+   
+
+    // Normalize and step toward player
+    const speed = 10; // adjust to taste
+    const dist = Math.sqrt(dx*dx + dy*dy);
+
+    if (dist > 1) {
+        block.x += (dx / dist) * speed;
+        block.y += (dy / dist) * speed;
+    }else{
+        console.log("im here")
+        playerHealth.decreaseStat(0.1)
+    }
+}
